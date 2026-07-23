@@ -53,6 +53,9 @@ class GeminiLegalEngine:
                 body = e.read().decode()[:300]
                 print(f"[Gemini REST attempt {attempt+1}] HTTP {e.code}: {body}")
                 if e.code == 429:
+                    if "depleted" in body.lower() or "credits" in body.lower():
+                        print("[Gemini Engine] Prepay credits depleted — serving instant contextual response.")
+                        break
                     time.sleep(2 ** attempt)
                     continue
                 break
