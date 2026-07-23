@@ -16,18 +16,18 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Environment Credentials
-SUPABASE_URL = os.getenv("SUPABASE_URL", "")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY", "")
-SUPABASE_PASSWORD = os.getenv("SUPABASE_DB_PASSWORD", "checkfortheway#")
+SUPABASE_URL: str = os.getenv("SUPABASE_URL", "")
+SUPABASE_KEY: str = os.getenv("SUPABASE_KEY", "")
+SUPABASE_PASSWORD: str = os.getenv("SUPABASE_DB_PASSWORD", "checkfortheway#")
 
 class DatabaseManager:
-    def __init__(self):
-        self.use_supabase = bool(SUPABASE_URL and SUPABASE_KEY and SUPABASE_URL != "https://your-project.supabase.co")
-        self.client = None
+    def __init__(self) -> None:
+        self.use_supabase: bool = bool(SUPABASE_URL and SUPABASE_KEY and SUPABASE_URL != "https://your-project.supabase.co")
+        self.client: Any = None
         
         if self.use_supabase:
             try:
-                from supabase import create_client
+                from supabase import create_client  # type: ignore
                 self.client = create_client(SUPABASE_URL, SUPABASE_KEY)
                 print("[DB] Connected to remote Supabase database instance.")
             except Exception as e:
@@ -35,10 +35,10 @@ class DatabaseManager:
                 self.use_supabase = False
 
         # Initialize SQLite fallback database for local execution & offline testing
-        self.sqlite_path = os.path.join(os.path.dirname(__file__), "aichatlegal_local.db")
+        self.sqlite_path: str = os.path.join(os.path.dirname(__file__), "aichatlegal_local.db")
         self._init_local_db()
 
-    def _init_local_db(self):
+    def _init_local_db(self) -> None:
         """Initializes local SQLite schema with enterprise sample data if empty."""
         conn = sqlite3.connect(self.sqlite_path)
         cursor = conn.cursor()
@@ -106,15 +106,16 @@ class DatabaseManager:
 
         # Seed sample data if empty
         cursor.execute("SELECT COUNT(*) FROM policies")
-        count = cursor.fetchone()[0]
+        count_row = cursor.fetchone()
+        count = count_row[0] if count_row else 0
         if count == 0:
             self._seed_sample_bank_policies(conn)
             
         conn.close()
 
-    def _seed_sample_bank_policies(self, conn: sqlite3.Connection):
+    def _seed_sample_bank_policies(self, conn: sqlite3.Connection) -> None:
         """Seeds rich sample banking policy documents for Sales & Legal testing."""
-        sample_policies = [
+        sample_policies: List[Dict[str, Any]] = [
             {
                 "id": str(uuid.uuid4()),
                 "policy_code": "POL-2026-8819",
@@ -213,10 +214,11 @@ Limitation of liability capped at 1.0x annual fees in event of sanctions screeni
 
     def get_all_policies(self) -> List[Dict[str, Any]]:
         """Retrieves all policy records ordered by creation date."""
-        if self.use_supabase and self.client:
+        if self.use_supabase and self.client is not None:
             try:
                 res = self.client.table("policies").select("*").order("created_at", desc=True).execute()
-                return res.data
+                if hasattr(res, "data") and res.data is not None:
+                    return res.data
             except Exception as e:
                 print(f"[Supabase Query Error] {e}. Falling back to SQLite.")
 
@@ -230,17 +232,17 @@ Limitation of liability capped at 1.0x annual fees in event of sanctions screeni
 
     def get_policy_by_id(self, policy_id: str) -> Optional[Dict[str, Any]]:
         """Fetch single policy details including risk scores and legal advice."""
-        if self.use_supabase and self.client:
+        if self.use_supabase and self.client is not None:
             try:
                 res = self.client.table("policies").select("*").eq("id", policy_id).execute()
-                if res.data:
+                if hasattr(res, "data") and res.data:
                     policy = res.data[0]
                     # Fetch risk score
                     r_res = self.client.table("risk_scores").select("*").eq("policy_id", policy_id).execute()
-                    policy["risk_score"] = r_res.data[0] if r_res.data else None
+                    policy["risk_score"] = r_res.data[0] if (hasattr(r_res, "data") and r_res.data) else None
                     # Fetch advice
                     a_res = self.client.table("legal_advice").select("*").eq("policy_id", policy_id).execute()
-                    policy["advice"] = a_res.data if a_res.data else []
+                    policy["advice"] = a_res.data if (hasattr(a_res, "data") and a_res.data) else []
                     return policy
             except Exception as e:
                 print(f"[Supabase Fetch Error] {e}. Falling back to SQLite.")
@@ -327,7 +329,7 @@ Limitation of liability capped at 1.0x annual fees in event of sanctions screeni
             "created_at": now_str
         }
 
-        if self.use_supabase and self.client:
+        if self.use_supabase and self.client is not None:
             try:
                 self.client.table("policies").insert(p_record).execute()
                 # Insert risk
@@ -374,7 +376,7 @@ Limitation of liability capped at 1.0x annual fees in event of sanctions screeni
             "created_at": now_str
         }
 
-        if self.use_supabase and self.client:
+        if self.use_supabase and self.client is not None:
             try:
                 # Insert advice
                 supa_rec = dict(rec)
@@ -407,10 +409,11 @@ Limitation of liability capped at 1.0x annual fees in event of sanctions screeni
 
     def get_audit_logs(self, limit: int = 50) -> List[Dict[str, Any]]:
         """Fetch audit trail for compliance and banking regulatory inspectors."""
-        if self.use_supabase and self.client:
+        if self.use_supabase and self.client is not None:
             try:
                 res = self.client.table("audit_logs").select("*").order("created_at", desc=True).limit(limit).execute()
-                return res.data
+                if hasattr(res, "data") and res.data is not None:
+                    return res.data
             except Exception as e:
                 print(f"[Supabase Audit Fetch Error] {e}. Falling back to SQLite.")
 
@@ -430,12 +433,12 @@ Limitation of liability capped at 1.0x annual fees in event of sanctions screeni
         conn.close()
         return rows
 
-    def _log_audit_event(self, policy_id: str, actor_name: str, actor_role: str, action_type: str, details: Dict[str, Any]):
+    def _log_audit_event(self, policy_id: str, actor_name: str, actor_role: str, action_type: str, details: Dict[str, Any]) -> None:
         """Internal helper to write audit entries."""
         now_str = datetime.now().isoformat()
         audit_id = str(uuid.uuid4())
         
-        if self.use_supabase and self.client:
+        if self.use_supabase and self.client is not None:
             try:
                 self.client.table("audit_logs").insert({
                     "id": audit_id,
@@ -462,4 +465,4 @@ Limitation of liability capped at 1.0x annual fees in event of sanctions screeni
             print(f"[Audit Log Exception] {e}")
 
 # Instantiated Singleton Database Manager
-db_manager = DatabaseManager()
+db_manager: DatabaseManager = DatabaseManager()

@@ -13,23 +13,24 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
 
 class GeminiLegalEngine:
-    def __init__(self):
-        self.api_available = False
-        self.client = None
+    def __init__(self) -> None:
+        self.api_available: bool = False
+        self.client: Any = None
+        self.framework: str = "simulated"
         
         if GEMINI_API_KEY and GEMINI_API_KEY != "your-gemini-api-key-here":
             try:
                 # Try google-genai or google-generativeai
                 try:
-                    from google import genai
+                    from google import genai  # type: ignore
                     self.client = genai.Client(api_key=GEMINI_API_KEY)
                     self.api_available = True
                     self.framework = "google-genai"
                 except ImportError:
-                    import google.generativeai as genai
+                    import google.generativeai as genai  # type: ignore
                     genai.configure(api_key=GEMINI_API_KEY)
                     self.client = genai.GenerativeModel('gemini-1.5-pro')
                     self.api_available = True
@@ -45,7 +46,7 @@ class GeminiLegalEngine:
         """
         Parses sales policy document text and returns structured legal risk scoring and recommendations.
         """
-        if self.api_available and self.client:
+        if self.api_available and self.client is not None:
             try:
                 prompt = f"""
                 You are General Counsel and Senior Risk Officer for a Tier-1 Global Investment Bank.
@@ -78,15 +79,15 @@ class GeminiLegalEngine:
                         model='gemini-2.5-flash',
                         contents=prompt,
                     )
-                    text_resp = response.text
+                    text_resp = str(response.text)
                 else:
                     response = self.client.generate_content(prompt)
-                    text_resp = response.text
+                    text_resp = str(response.text)
 
                 # Parse JSON
                 json_match = re.search(r'\{.*\}', text_resp, re.DOTALL)
                 if json_match:
-                    return json.loads(json_match.group(0))
+                    return dict(json.loads(json_match.group(0)))
             except Exception as e:
                 print(f"[Gemini API Call Failed] {e}. Using deterministic analytical fallback.")
 
@@ -96,7 +97,7 @@ class GeminiLegalEngine:
     def _rule_based_policy_analysis(self, title: str, deal_value: float, content: str) -> Dict[str, Any]:
         """Intelligent analytical fallback when Gemini API key is offline or unconfigured."""
         c_lower = content.lower()
-        flagged = []
+        flagged: List[str] = []
         risk_score = 30
         
         # Risk factors check
@@ -150,7 +151,7 @@ class GeminiLegalEngine:
         """
         Generates persona-aware response for Sales Reps, Sales Heads, or Legal Counsel.
         """
-        if self.api_available and self.client:
+        if self.api_available and self.client is not None:
             try:
                 system_context = f"""
                 You are AIChatLegal, an AI Legal & Regulatory Advisor for a major financial institution.
@@ -166,10 +167,10 @@ class GeminiLegalEngine:
                         model='gemini-2.5-flash',
                         contents=full_prompt
                     )
-                    return res.text
+                    return str(res.text)
                 else:
                     res = self.client.generate_content(full_prompt)
-                    return res.text
+                    return str(res.text)
             except Exception as e:
                 print(f"[Gemini Chat Error] {e}. Using intelligent fallback responder.")
 
@@ -218,4 +219,4 @@ class GeminiLegalEngine:
             )
 
 # Instantiated Singleton Engine
-gemini_engine = GeminiLegalEngine()
+gemini_engine: GeminiLegalEngine = GeminiLegalEngine()
