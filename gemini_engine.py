@@ -16,7 +16,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
+GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "").strip("\"'")
 
 class GeminiLegalEngine:
     def __init__(self) -> None:
@@ -25,7 +25,6 @@ class GeminiLegalEngine:
         self.framework: str = "simulated"
         
         if GEMINI_API_KEY and GEMINI_API_KEY != "your-gemini-api-key-here":
-            # Test direct REST connectivity first
             if self._test_rest_connection():
                 self.api_available = True
                 self.framework = "gemini-rest-api"
@@ -71,39 +70,44 @@ class GeminiLegalEngine:
 
     def _call_gemini_rest(self, prompt: str) -> Optional[str]:
         """Direct REST API call to Gemini endpoints using urllib."""
-        try:
-            url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent"
-            headers = {
-                "Content-Type": "application/json",
-                "X-goog-api-key": GEMINI_API_KEY
-            }
-            payload = {
-                "contents": [
-                    {"parts": [{"text": prompt}]}
-                ]
-            }
-            data = json.dumps(payload).encode("utf-8")
-            req = urllib.request.Request(url, data=data, headers=headers, method="POST")
-            
-            with urllib.request.urlopen(req, timeout=25) as resp:
-                res_json = json.loads(resp.read().decode("utf-8"))
-                candidates = res_json.get("candidates", [])
-                if candidates:
-                    parts = candidates[0].get("content", {}).get("parts", [])
-                    if parts:
-                        return parts[0].get("text", "")
-        except Exception as e:
-            print(f"[Gemini REST Execution Error] {e}")
+        endpoints = [
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent",
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+        ]
+        
+        for url in endpoints:
+            try:
+                headers = {
+                    "Content-Type": "application/json",
+                    "X-goog-api-key": GEMINI_API_KEY
+                }
+                payload = {
+                    "contents": [
+                        {"parts": [{"text": prompt}]}
+                    ]
+                }
+                data = json.dumps(payload).encode("utf-8")
+                req = urllib.request.Request(url, data=data, headers=headers, method="POST")
+                
+                with urllib.request.urlopen(req, timeout=25) as resp:
+                    res_json = json.loads(resp.read().decode("utf-8"))
+                    candidates = res_json.get("candidates", [])
+                    if candidates:
+                        parts = candidates[0].get("content", {}).get("parts", [])
+                        if parts:
+                            return parts[0].get("text", "")
+            except Exception as e:
+                print(f"[Gemini REST Endpoint Failure ({url})] {e}")
         return None
 
     def analyze_policy_upload(self, title: str, client_name: str, deal_value: float, content: str) -> Dict[str, Any]:
         """
         Parses sales policy document text and returns structured legal risk scoring and recommendations.
         """
-        if self.api_available:
+        if GEMINI_API_KEY and GEMINI_API_KEY != "your-gemini-api-key-here":
             prompt = f"""
-            You are General Counsel and Senior Risk Officer for a Tier-1 Global Investment Bank.
-            Analyze the following sales policy proposal and deal upload for legal and regulatory risk.
+            You are General Counsel and Senior Credit Risk Officer for a Tier-1 Global Investment Bank.
+            Analyze the following commercial lending or deal policy proposal for legal and regulatory risk.
 
             Deal Context:
             - Proposal Title: {title}
@@ -127,22 +131,7 @@ class GeminiLegalEngine:
             }}
             """
             
-            text_resp = None
-            if self.framework == "gemini-rest-api":
-                text_resp = self._call_gemini_rest(prompt)
-            elif self.framework == "google-genai" and self.client:
-                try:
-                    res = self.client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
-                    text_resp = str(res.text)
-                except Exception:
-                    pass
-            elif self.framework == "google-generativeai" and self.client:
-                try:
-                    res = self.client.generate_content(prompt)
-                    text_resp = str(res.text)
-                except Exception:
-                    pass
-
+            text_resp = self._call_gemini_rest(prompt)
             if text_resp:
                 json_match = re.search(r'\{.*\}', text_resp, re.DOTALL)
                 if json_match:
@@ -209,33 +198,25 @@ class GeminiLegalEngine:
     def generate_chat_response(self, user_role: str, user_query: str, chat_history: List[Dict[str, str]], policy_context: Optional[Dict[str, Any]] = None) -> str:
         """
         Generates persona-aware response for Sales Reps, Sales Heads, or Legal Counsel.
+        Enforces strict banking domain constraints.
         """
-        if self.api_available:
-            system_context = f"""
-            You are AIChatLegal, an AI Legal & Regulatory Advisor for a major financial institution.
-            User Role: {user_role.upper()}
-            """
-            if policy_context:
-                system_context += f"\nActive Policy Context: {json.dumps(policy_context, default=str)}"
+        system_context = f"""
+        You are AIChatLegal, an elite General Counsel, Chief Risk Officer, and Banking Regulatory Advisor for a major Tier-1 Investment Bank.
 
-            full_prompt = f"{system_context}\n\nUser Question: {user_query}"
+        STRICT DOMAIN BOUNDARIES & BEHAVIORAL DIRECTIVES:
+        1. Primary Mission: You advise bank staff ({user_role.upper()} persona) on commercial lending policies, credit term overrides, syndicated debt facilities, risk scoring, and federal banking compliance (SEC, OCC, FINRA, CFPB, Basel III, GDPR, HIPAA).
+        2. Domain Stickiness: Keep every response strictly focused on banking, legal risk, credit underwriting, and regulatory compliance.
+        3. Casual / Greetings Handling: If the user says "hello", "hi", or asks general questions, politely greet them as a Bank Legal Advisor for the {user_role.upper()} role and present immediate banking compliance assistance choices.
+        4. Structured Output: Structure your analysis with clear headers, contract rider schedules (e.g. Schedule 14B, SOFR Fallback Rider, DACA Control Agreements), and concrete risk mitigation advice.
+        """
 
-            text_resp = None
-            if self.framework == "gemini-rest-api":
-                text_resp = self._call_gemini_rest(full_prompt)
-            elif self.framework == "google-genai" and self.client:
-                try:
-                    res = self.client.models.generate_content(model='gemini-2.5-flash', contents=full_prompt)
-                    text_resp = str(res.text)
-                except Exception:
-                    pass
-            elif self.framework == "google-generativeai" and self.client:
-                try:
-                    res = self.client.generate_content(full_prompt)
-                    text_resp = str(res.text)
-                except Exception:
-                    pass
+        if policy_context:
+            system_context += f"\nActive Attached Deal Policy Context:\n{json.dumps(policy_context, default=str)}"
 
+        full_prompt = f"{system_context}\n\nUser Inquiry: {user_query}"
+
+        if GEMINI_API_KEY and GEMINI_API_KEY != "your-gemini-api-key-here":
+            text_resp = self._call_gemini_rest(full_prompt)
             if text_resp:
                 return text_resp
 
