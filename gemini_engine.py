@@ -2,12 +2,15 @@
 AIChatLegal Gemini Engine
 Integrates Google Gemini API for policy document parsing, legal risk scoring, 
 regulatory compliance analysis, and persona-aware chatbot interaction.
+Supports REST API via urllib, google-genai, and google-generativeai SDKs.
 Project: aichatlegal
 """
 
 import os
 import json
 import re
+import urllib.request
+import urllib.error
 from typing import Dict, List, Any, Tuple, Optional
 from dotenv import load_dotenv
 
@@ -22,74 +25,131 @@ class GeminiLegalEngine:
         self.framework: str = "simulated"
         
         if GEMINI_API_KEY and GEMINI_API_KEY != "your-gemini-api-key-here":
-            try:
-                # Try google-genai or google-generativeai
+            # Test direct REST connectivity first
+            if self._test_rest_connection():
+                self.api_available = True
+                self.framework = "gemini-rest-api"
+                print(f"[Gemini Engine] Successfully verified live Gemini REST API with active API key.")
+            else:
                 try:
                     from google import genai  # type: ignore
                     self.client = genai.Client(api_key=GEMINI_API_KEY)
                     self.api_available = True
                     self.framework = "google-genai"
                 except ImportError:
-                    import google.generativeai as genai  # type: ignore
-                    genai.configure(api_key=GEMINI_API_KEY)
-                    self.client = genai.GenerativeModel('gemini-1.5-pro')
-                    self.api_available = True
-                    self.framework = "google-generativeai"
-                print(f"[Gemini Engine] Successfully initialized using {self.framework}.")
-            except Exception as e:
-                print(f"[Gemini Warning] SDK init failed ({e}). Enabling intelligent analytical fallback engine.")
-                self.api_available = False
+                    try:
+                        import google.generativeai as genai  # type: ignore
+                        genai.configure(api_key=GEMINI_API_KEY)
+                        self.client = genai.GenerativeModel('gemini-1.5-pro')
+                        self.api_available = True
+                        self.framework = "google-generativeai"
+                    except Exception as e:
+                        print(f"[Gemini Warning] SDK init failed ({e}). Enabling analytical engine fallback.")
+                        self.api_available = False
         else:
             print("[Gemini Engine] No valid GEMINI_API_KEY found. Running in high-precision simulated AI inference mode.")
+
+    def _test_rest_connection(self) -> bool:
+        """Verifies active Gemini REST API key against Google endpoint."""
+        try:
+            url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent"
+            headers = {
+                "Content-Type": "application/json",
+                "X-goog-api-key": GEMINI_API_KEY
+            }
+            data = json.dumps({
+                "contents": [{"parts": [{"text": "ping"}]}]
+            }).encode("utf-8")
+            
+            req = urllib.request.Request(url, data=data, headers=headers, method="POST")
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                if resp.status == 200:
+                    return True
+        except Exception as e:
+            print(f"[Gemini REST Check] {e}")
+        return False
+
+    def _call_gemini_rest(self, prompt: str) -> Optional[str]:
+        """Direct REST API call to Gemini endpoints using urllib."""
+        try:
+            url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent"
+            headers = {
+                "Content-Type": "application/json",
+                "X-goog-api-key": GEMINI_API_KEY
+            }
+            payload = {
+                "contents": [
+                    {"parts": [{"text": prompt}]}
+                ]
+            }
+            data = json.dumps(payload).encode("utf-8")
+            req = urllib.request.Request(url, data=data, headers=headers, method="POST")
+            
+            with urllib.request.urlopen(req, timeout=25) as resp:
+                res_json = json.loads(resp.read().decode("utf-8"))
+                candidates = res_json.get("candidates", [])
+                if candidates:
+                    parts = candidates[0].get("content", {}).get("parts", [])
+                    if parts:
+                        return parts[0].get("text", "")
+        except Exception as e:
+            print(f"[Gemini REST Execution Error] {e}")
+        return None
 
     def analyze_policy_upload(self, title: str, client_name: str, deal_value: float, content: str) -> Dict[str, Any]:
         """
         Parses sales policy document text and returns structured legal risk scoring and recommendations.
         """
-        if self.api_available and self.client is not None:
-            try:
-                prompt = f"""
-                You are General Counsel and Senior Risk Officer for a Tier-1 Global Investment Bank.
-                Analyze the following sales policy proposal and deal upload for legal and regulatory risk.
+        if self.api_available:
+            prompt = f"""
+            You are General Counsel and Senior Risk Officer for a Tier-1 Global Investment Bank.
+            Analyze the following sales policy proposal and deal upload for legal and regulatory risk.
 
-                Deal Context:
-                - Proposal Title: {title}
-                - Client: {client_name}
-                - Deal Value (USD): ${deal_value:,.2f}
+            Deal Context:
+            - Proposal Title: {title}
+            - Client: {client_name}
+            - Deal Value (USD): ${deal_value:,.2f}
 
-                Document Text:
-                {content}
+            Document Text:
+            {content}
 
-                Return ONLY a JSON object with the following exact keys:
-                {{
-                    "overall_risk_score": int (0 to 100),
-                    "risk_level": "low" | "medium" | "high" | "critical",
-                    "regulatory_compliance_score": int (0 to 100),
-                    "financial_exposure_score": int (0 to 100),
-                    "jurisdictional_risk_score": int (0 to 100),
-                    "flagged_clauses": [list of specific clause names/issues],
-                    "ai_recommendation": string (detailed legal guidance and advice for Sales and Lawyers),
-                    "recommended_status": "pending_legal_review" | "approved_with_riders" | "flagged_high_risk" | "rejected",
-                    "summary": string (concise 2-sentence summary of the upload)
-                }}
-                """
-                
-                if self.framework == "google-genai":
-                    response = self.client.models.generate_content(
-                        model='gemini-2.5-flash',
-                        contents=prompt,
-                    )
-                    text_resp = str(response.text)
-                else:
-                    response = self.client.generate_content(prompt)
-                    text_resp = str(response.text)
+            Return ONLY a valid JSON object with the following exact keys and no extra formatting text:
+            {{
+                "overall_risk_score": 65,
+                "risk_level": "medium",
+                "regulatory_compliance_score": 75,
+                "financial_exposure_score": 60,
+                "jurisdictional_risk_score": 80,
+                "flagged_clauses": ["SOFR margin override waiver", "Financial covenant relaxation"],
+                "ai_recommendation": "Detailed legal guidance here...",
+                "recommended_status": "pending_legal_review",
+                "summary": "Concise two-sentence summary..."
+            }}
+            """
+            
+            text_resp = None
+            if self.framework == "gemini-rest-api":
+                text_resp = self._call_gemini_rest(prompt)
+            elif self.framework == "google-genai" and self.client:
+                try:
+                    res = self.client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
+                    text_resp = str(res.text)
+                except Exception:
+                    pass
+            elif self.framework == "google-generativeai" and self.client:
+                try:
+                    res = self.client.generate_content(prompt)
+                    text_resp = str(res.text)
+                except Exception:
+                    pass
 
-                # Parse JSON
+            if text_resp:
                 json_match = re.search(r'\{.*\}', text_resp, re.DOTALL)
                 if json_match:
-                    return dict(json.loads(json_match.group(0)))
-            except Exception as e:
-                print(f"[Gemini API Call Failed] {e}. Using deterministic analytical fallback.")
+                    try:
+                        return dict(json.loads(json_match.group(0)))
+                    except Exception as e:
+                        print(f"[JSON Parse Error] {e}")
 
         # Deterministic Analytical Fallback Engine
         return self._rule_based_policy_analysis(title, deal_value, content)
@@ -100,7 +160,6 @@ class GeminiLegalEngine:
         flagged: List[str] = []
         risk_score = 30
         
-        # Risk factors check
         if "sanctions" in c_lower or "ofac" in c_lower or "unconfirmed" in c_lower:
             flagged.append("OFAC & International Sanctions Risk Clause")
             risk_score += 45
@@ -151,28 +210,34 @@ class GeminiLegalEngine:
         """
         Generates persona-aware response for Sales Reps, Sales Heads, or Legal Counsel.
         """
-        if self.api_available and self.client is not None:
-            try:
-                system_context = f"""
-                You are AIChatLegal, an AI Legal & Regulatory Advisor for a major financial institution.
-                User Role: {user_role.upper()}
-                """
-                if policy_context:
-                    system_context += f"\nActive Policy Context: {json.dumps(policy_context, default=str)}"
+        if self.api_available:
+            system_context = f"""
+            You are AIChatLegal, an AI Legal & Regulatory Advisor for a major financial institution.
+            User Role: {user_role.upper()}
+            """
+            if policy_context:
+                system_context += f"\nActive Policy Context: {json.dumps(policy_context, default=str)}"
 
-                full_prompt = f"{system_context}\n\nUser Question: {user_query}"
+            full_prompt = f"{system_context}\n\nUser Question: {user_query}"
 
-                if self.framework == "google-genai":
-                    res = self.client.models.generate_content(
-                        model='gemini-2.5-flash',
-                        contents=full_prompt
-                    )
-                    return str(res.text)
-                else:
+            text_resp = None
+            if self.framework == "gemini-rest-api":
+                text_resp = self._call_gemini_rest(full_prompt)
+            elif self.framework == "google-genai" and self.client:
+                try:
+                    res = self.client.models.generate_content(model='gemini-2.5-flash', contents=full_prompt)
+                    text_resp = str(res.text)
+                except Exception:
+                    pass
+            elif self.framework == "google-generativeai" and self.client:
+                try:
                     res = self.client.generate_content(full_prompt)
-                    return str(res.text)
-            except Exception as e:
-                print(f"[Gemini Chat Error] {e}. Using intelligent fallback responder.")
+                    text_resp = str(res.text)
+                except Exception:
+                    pass
+
+            if text_resp:
+                return text_resp
 
         # Fallback Conversational Engine
         return self._simulate_chat_response(user_role, user_query, policy_context)
