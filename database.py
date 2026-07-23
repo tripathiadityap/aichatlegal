@@ -4,6 +4,7 @@ Provides unified database interface for Supabase PostgreSQL (via REST API & Clie
 with local SQLite fallback capabilities.
 Password Assumption: checkfortheway#
 Project: aichatlegal
+Target Project Ref: tbibrvctsbslgdniqugw
 """
 
 import os
@@ -19,58 +20,66 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Environment Credentials
-SUPABASE_URL: str = os.getenv("SUPABASE_URL", "https://azkqaexykjihaetxixrt.supabase.co").strip("\"'").rstrip("/")
-DEFAULT_ANON_KEY: str = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF6a3FhZXh5a2ppaGFldHhpeHJ0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQwNTM3MDUsImV4cCI6MjA5OTYyOTcwNX0.-A3vNvVEPnRy0cOnd_LfW7eoKUrWno_5_8Lx_AUkaA4"
-env_key = os.getenv("SUPABASE_KEY", "").strip("\"'")
-SUPABASE_KEY: str = env_key if (env_key and env_key.startswith("eyJ")) else DEFAULT_ANON_KEY
-SUPABASE_PASSWORD: str = os.getenv("SUPABASE_DB_PASSWORD", "checkfortheway#").strip("\"'")
+ENV_SUPABASE_URL = os.getenv("SUPABASE_URL", "https://tbibrvctsbslgdniqugw.supabase.co").strip("\"'").rstrip("/")
+ENV_SUPABASE_KEY = os.getenv("SUPABASE_KEY", "").strip("\"'")
+
+PROJECTS = [
+    {
+        "url": ENV_SUPABASE_URL,
+        "key": ENV_SUPABASE_KEY
+    },
+    {
+        "url": "https://azkqaexykjihaetxixrt.supabase.co",
+        "key": os.getenv("SUPABASE_ANON_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF6a3FhZXh5a2ppaGFldHhpeHJ0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQwNTM3MDUsImV4cCI6MjA5OTYyOTcwNX0.-A3vNvVEPnRy0cOnd_LfW7eoKUrWno_5_8Lx_AUkaA4").strip("\"'")
+    }
+]
 
 class DatabaseManager:
     def __init__(self) -> None:
-        self.use_supabase: bool = bool(SUPABASE_URL and SUPABASE_KEY and "your-project" not in SUPABASE_URL)
-        self.client: Any = None
+        self.use_supabase: bool = False
+        self.active_url: str = ""
+        self.active_key: str = ""
         
-        # Test Supabase connection
-        if self.use_supabase:
-            if self._test_supabase_rest():
-                print(f"[DB Engine] Successfully connected to live Supabase cloud database ({SUPABASE_URL}).")
-            else:
-                try:
-                    from supabase import create_client  # type: ignore
-                    self.client = create_client(SUPABASE_URL, SUPABASE_KEY)
-                    print("[DB Engine] Connected via Supabase SDK client.")
-                except Exception:
-                    print("[DB Engine Warning] Supabase REST/SDK unavailable. Using local embedded SQLite store.")
-                    self.use_supabase = False
+        # Test connection across project endpoints
+        for p in PROJECTS:
+            if p["url"] and p["key"] and self._test_endpoint(p["url"], p["key"]):
+                self.use_supabase = True
+                self.active_url = p["url"]
+                self.active_key = p["key"]
+                print(f"[DB Engine] Connected to live Supabase database ({self.active_url}).")
+                break
+
+        if not self.use_supabase:
+            print("[DB Engine Warning] Remote Supabase unavailable. Operating in local embedded SQLite mode.")
 
         # Initialize SQLite fallback database for local execution & offline testing
         self.sqlite_path: str = os.path.join(os.path.dirname(__file__), "aichatlegal_local.db")
         self._init_local_db()
 
-    def _test_supabase_rest(self) -> bool:
-        """Verifies active Supabase REST connection."""
+    def _test_endpoint(self, url: str, key: str) -> bool:
+        """Verifies active connection to a Supabase project."""
         try:
-            url = f"{SUPABASE_URL}/rest/v1/policies?select=id&limit=1"
+            req_url = f"{url}/rest/v1/"
             headers = {
-                "apikey": SUPABASE_KEY,
-                "Authorization": f"Bearer {SUPABASE_KEY}",
+                "apikey": key,
+                "Authorization": f"Bearer {key}",
                 "Content-Type": "application/json"
             }
-            req = urllib.request.Request(url, headers=headers, method="GET")
+            req = urllib.request.Request(req_url, headers=headers, method="GET")
             with urllib.request.urlopen(req, timeout=4) as resp:
                 if resp.status in (200, 201):
                     return True
-        except Exception as e:
-            print(f"[Supabase Connection Check] {e}")
+        except Exception:
+            pass
         return False
 
     def _supabase_request(self, endpoint: str, method: str = "GET", payload: Optional[Any] = None) -> Optional[Any]:
-        """Executes native REST requests against Supabase PostgREST API."""
+        """Executes REST requests against the active Supabase PostgREST API."""
         try:
-            url = f"{SUPABASE_URL}/rest/v1/{endpoint}"
+            url = f"{self.active_url}/rest/v1/{endpoint}"
             headers = {
-                "apikey": SUPABASE_KEY,
-                "Authorization": f"Bearer {SUPABASE_KEY}",
+                "apikey": self.active_key,
+                "Authorization": f"Bearer {self.active_key}",
                 "Content-Type": "application/json",
                 "Prefer": "return=representation"
             }
@@ -83,7 +92,7 @@ class DatabaseManager:
                     return json.loads(res_bytes.decode("utf-8"))
                 return []
         except Exception as e:
-            print(f"[Supabase REST Request Error] {e}")
+            print(f"[Supabase REST Request Exception] {e}")
             return None
 
     def _init_local_db(self) -> None:
@@ -262,7 +271,7 @@ Limitation of liability capped at 1.0x annual fees in event of sanctions screeni
         """Retrieves all policy records ordered by creation date."""
         if self.use_supabase:
             data = self._supabase_request("policies?select=*&order=created_at.desc", "GET")
-            if data is not None:
+            if data is not None and isinstance(data, list) and len(data) > 0:
                 return data
 
         conn = sqlite3.connect(self.sqlite_path)
@@ -277,12 +286,12 @@ Limitation of liability capped at 1.0x annual fees in event of sanctions screeni
         """Fetch single policy details including risk scores and legal advice."""
         if self.use_supabase:
             p_data = self._supabase_request(f"policies?id=eq.{policy_id}&select=*", "GET")
-            if p_data:
+            if p_data and isinstance(p_data, list) and len(p_data) > 0:
                 policy = p_data[0]
                 r_data = self._supabase_request(f"risk_scores?policy_id=eq.{policy_id}&select=*", "GET")
-                policy["risk_score"] = r_data[0] if r_data else None
+                policy["risk_score"] = r_data[0] if (r_data and isinstance(r_data, list) and len(r_data) > 0) else None
                 a_data = self._supabase_request(f"legal_advice?policy_id=eq.{policy_id}&select=*", "GET")
-                policy["advice"] = a_data if a_data else []
+                policy["advice"] = a_data if (a_data and isinstance(a_data, list)) else []
                 return policy
 
         conn = sqlite3.connect(self.sqlite_path)
@@ -447,7 +456,7 @@ Limitation of liability capped at 1.0x annual fees in event of sanctions screeni
         """Fetch audit trail for compliance and banking regulatory inspectors."""
         if self.use_supabase:
             logs = self._supabase_request(f"audit_logs?select=*&order=created_at.desc&limit={limit}", "GET")
-            if logs is not None:
+            if logs is not None and isinstance(logs, list) and len(logs) > 0:
                 return logs
 
         conn = sqlite3.connect(self.sqlite_path)
