@@ -144,23 +144,29 @@ function submitChat() {
     chatBox.appendChild(aiMsg);
     chatBox.scrollTop = chatBox.scrollHeight;
 
+    var controller = new AbortController();
+    var timer = setTimeout(function() { controller.abort(); }, 28000);
+
     fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_role: role, user_query: q, policy_id: policySel || null })
+        body: JSON.stringify({ user_role: role, user_query: q, policy_id: policySel || null }),
+        signal: controller.signal
     })
-    .then(function(res) { return res.json(); })
+    .then(function(res) { clearTimeout(timer); return res.json(); })
     .then(function(data) {
-        let text = data.response || '';
-        text = text.replace(/\n/g, '<br>');
-        text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-        text = text.replace(/### (.*?)(<br>|$)/g, '<h4 style="margin:8px 0 4px 0;color:#a5b4fc;">$1</h4>');
+        var text = data.response || '';
+        // Convert markdown-style formatting to HTML
+        text = text.split('\n').join('<br>');
+        text = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+        text = text.replace(/###\s(.+?)(<br>|$)/g, '<h4 style="margin:8px 0 4px 0;color:#a5b4fc;">$1</h4>');
         aiMsg.innerHTML = text;
         chatBox.scrollTop = chatBox.scrollHeight;
     })
     .catch(function(err) {
-        console.error("Chat fetch error:", err);
-        aiMsg.innerHTML = '<em>❌ Error communicating with Gemini AI assistant.</em>';
+        clearTimeout(timer);
+        console.error('Chat fetch error:', err);
+        aiMsg.innerHTML = '<em>❌ Error communicating with Gemini AI assistant. Please try again.</em>';
         chatBox.scrollTop = chatBox.scrollHeight;
     });
 }
