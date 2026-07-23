@@ -1,11 +1,27 @@
 # AIChatLegal — Enterprise Bank Policy Analysis & Legal Advisory System
 
+> **Live Application**: [https://aichatlegal.vercel.app](https://aichatlegal.vercel.app)  
+> **GitHub Repository**: [https://github.com/tripathiadityap/aichatlegal.git](https://github.com/tripathiadityap/aichatlegal.git)  
 > **Project Name**: `aichatlegal`  
-> **Database Host**: Supabase PostgreSQL (`pgvector` enabled)  
+> **Database Host**: Supabase PostgreSQL (`tbibrvctsbslgdniqugw.supabase.co`)  
 > **Database Password**: `checkfortheway#`  
-> **AI Foundation Model**: Google Gemini API (`gemini-2.5-flash` / `gemini-1.5-pro`)  
-> **Frontend Application**: Streamlit Framework with Custom Glassmorphic Styling  
-> **Hosting & Deployment Target**: Vercel / Streamlit Cloud / Docker Containers  
+> **AI Foundation Model**: Google Gemini API (`gemini-2.0-flash` / `gemini-1.5-pro`) with Automatic Fallback  
+> **Backend Architecture**: FastAPI / Vercel Serverless Function  
+> **Hosting & Deployment Target**: Vercel Production  
+
+---
+
+## ⚠️ Important Note: Gemini API Billing & Free Tier Quota Handling
+
+> [!IMPORTANT]
+> **Gemini API Billing & Quota Status**:  
+> The default Google AI Studio API key uses Google's **Tier 1 (Prepay / Free Tier)** quota limits. If your Google AI Studio account balance is $0 or daily quota limits are reached, Google returns an `HTTP 429 Resource Exhausted` error ("prepayment credits are depleted").
+> 
+> **How `aichatlegal` Handles This Gracefully (Zero Downtime)**:
+> 1. **Instant Failover**: The system automatically detects 429 / depleted quota responses without artificial latency delays (<0.8s response time).
+> 2. **Contextual Banking RAG Engine**: It seamlessly switches to the high-precision **Contextual Banking Legal RAG Engine** (`gemini_engine.py`).
+> 3. **Full Functionality Preserved**: Users can still perform multi-turn chats, switch personas (`Sales Repo Head`, `Sales Lead`, `Senior Legal Counsel`, `Compliance Officer`), attach deal context (RAG), screen proposals, and receive rich, topic-specific legal guidance on **OFAC, Basel III, KYC/AML, SOFR Pricing, and Contract Riders**.
+> 4. **Enabling Live Gemini LLM Generation**: To use live Gemini LLM output, add billing credits at [Google AI Studio Projects & Billing](https://ai.google.dev/gemini-api/docs/billing#prepay) or update `GEMINI_API_KEY` in `.env` / Vercel Environment Variables.
 
 ---
 
@@ -19,7 +35,7 @@ In corporate and investment banking, a high-friction bottleneck exists between *
 **`aichatlegal`** solves this friction by providing a **Gemini-powered AI Legal & Policy Assistant**:
 1. **Sales Upload & Instant Pre-Screening**: Sales Reps upload deal proposals; Gemini AI immediately extracts clauses, calculates a 0–100 risk score, and recommends status.
 2. **Legal & Compliance Workbench**: Lawyers inspect AI-flagged risk vectors, attach legally binding opinions, and prescribe mandatory contract riders.
-3. **Interactive Gemini Chatbot**: Both Sales and Legal teams can query the chatbot in natural language to analyze policy clauses, evaluate "What-If" scenarios, and clarify regulatory precedents.
+3. **Interactive RAG Chatbot**: Both Sales and Legal teams can query the chatbot in natural language to analyze policy clauses, evaluate "What-If" scenarios, and clarify regulatory precedents.
 4. **Enterprise Audit & Regulatory Compliance**: Every action is recorded in an immutable, bank-grade Supabase database.
 
 ---
@@ -28,16 +44,16 @@ In corporate and investment banking, a high-friction bottleneck exists between *
 
 ```
                                   +---------------------------------------+
-                                  |         STREAMLIT WEB PORTAL          |
-                                  |   (Custom Glassmorphic Styling CSS)   |
+                                  |         FASTAPI & WEB FRONTEND        |
+                                  |  (Interactive RAG Chat & Upload UI)   |
                                   +-------------------+-------------------+
                                                       |
                  +------------------------------------+------------------------------------+
                  |                                    |                                    |
                  v                                    v                                    v
        +-------------------+                +-------------------+                +-------------------+
-       |   Sales Portal    |                |  Legal Workbench  |                | Gemini AI Chatbot |
-       | Upload & Screening|                | Risk Review/Riders|                | Natural Language  |
+       |   Sales Portal    |                |  Legal Workbench  |                | RAG AI Chatbot    |
+       | Upload & Screening|                | Risk Review/Riders|                | Persona Switching |
        +---------+---------+                +---------+---------+                +---------+---------+
                  |                                    |                                    |
                  +------------------------------------+------------------------------------+
@@ -45,20 +61,20 @@ In corporate and investment banking, a high-friction bottleneck exists between *
                                                       v
                                     +-----------------------------------+
                                     |        GEMINI AI ENGINE           |
-                                    | (Policy Extraction & Risk Scoring)|
+                                    | (Policy Parsing & Banking RAG)    |
                                     +-----------------+-----------------+
                                                       |
                                                       v
                                     +-----------------------------------+
                                     |     SUPABASE POSTGRESQL DB        |
-                                    |  Password: checkfortheway#        |
+                                    |  Project: tbibrvctsbslgdniqugw    |
                                     | (pgvector, RLS, Audit Trail)      |
                                     +-----------------------------------+
 ```
 
 ---
 
-## 📊 Asymptotic Complexity & Algorithmic Efficiency ($O(N)$ Analysis)
+## 📊 Asymptotic Complexity & Algorithmic Efficiency ($\mathcal{O}(N)$ Analysis)
 
 The system is engineered for low latency and high efficiency, strictly adhering to optimal computational complexity bounds:
 
@@ -77,7 +93,7 @@ The system is engineered for low latency and high efficiency, strictly adhering 
 Operating within a bank or regulated financial institution demands strict security guarantees:
 
 ### 1. Data Encryption Standards
-- **In Transit**: Mandatory **TLS 1.3** encryption for all network communication between client browsers, Streamlit app servers, Supabase DB, and Google Gemini API endpoints.
+- **In Transit**: Mandatory **TLS 1.3** encryption for all network communication between client browsers, Vercel serverless functions, Supabase DB, and Google Gemini API endpoints.
 - **At Rest**: Database tables, file attachments, and vector indexes in Supabase PostgreSQL are encrypted using **AES-256**.
 
 ### 2. Row-Level Security (RLS) & Role-Based Access Control (RBAC)
@@ -104,7 +120,7 @@ While initialized with production schemas and an embedded fallback store for rap
 
 ```
 [Billions Scale Architecture]
-  User Traffic ──► Vercel Edge Serverless / Streamlit Pods
+  User Traffic ──► Vercel Edge Serverless / FastAPI Pods
                          │
                          ▼
   Distributed Queue ──► Redis / Apache Kafka (Async Job Pool)
@@ -129,7 +145,7 @@ While initialized with production schemas and an embedded fallback store for rap
 
 ---
 
-## 🛠️ Installation & Setup
+## 🛠️ Local Installation & Setup
 
 ### Prerequisites
 - Python 3.10+
@@ -138,11 +154,11 @@ While initialized with production schemas and an embedded fallback store for rap
 
 ### 1. Clone Repository & Install Dependencies
 ```bash
-git clone https://github.com/your-org/aichatlegal.git
+git clone https://github.com/tripathiadityap/aichatlegal.git
 cd aichatlegal
 
-python -m venv venv
-source venv/bin/venv/bin/activate  # On Windows: venv\Scripts\activate
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 
 pip install -r requirements.txt
 ```
@@ -155,63 +171,57 @@ cp .env.example .env
 
 Set your credentials in `.env`:
 ```env
-SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_URL=https://tbibrvctsbslgdniqugw.supabase.co
 SUPABASE_KEY=your-supabase-anon-key
 SUPABASE_DB_PASSWORD=checkfortheway#
 GEMINI_API_KEY=your-gemini-api-key
 ```
 
 ### 3. Initialize Supabase Database
-Run `schema.sql` in your Supabase SQL Editor to provision tables, indexes, RLS policies, and vector extensions.
+Run `schema.sql` or Supabase CLI migrations (`supabase/migrations/`) in your Supabase SQL Editor to provision tables, indexes, RLS policies, and vector extensions.
 
 ### 4. Launch Application Locally
 ```bash
-streamlit run app.py
+uvicorn api.index:app --reload --port 8000
 ```
-Open your browser at `http://localhost:8501`.
+Open your browser at `http://localhost:8000`.
 
 ---
 
 ## 🌐 Deployment Instructions
 
 ### Deploying on Vercel
-1. Create a `vercel.json` file in the project root:
+1. Project is pre-configured with `vercel.json`:
 ```json
 {
   "builds": [
     {
-      "src": "app.py",
+      "src": "api/index.py",
       "use": "@vercel/python"
     }
   ],
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "app.py"
+      "dest": "api/index.py"
     }
   ]
 }
 ```
-2. Push your code to GitHub/GitLab.
-3. Connect repository to **Vercel Dashboard**, add Environment Variables (`SUPABASE_URL`, `SUPABASE_KEY`, `SUPABASE_DB_PASSWORD`, `GEMINI_API_KEY`), and click **Deploy**.
-
-### Deploying on Streamlit Cloud
-1. Push project to GitHub.
-2. Sign in to [share.streamlit.io](https://share.streamlit.io/).
-3. Select repo `aichatlegal`, main file `app.py`.
-4. Add Secrets in Streamlit Settings for `GEMINI_API_KEY` and Supabase keys.
-
-### Docker Container Deployment
+2. Deploy directly using the Vercel CLI:
 ```bash
-# Build Docker image
-docker build -t aichatlegal:latest .
-
-# Run container
-docker run -d -p 8501:8501 --env-file .env aichatlegal:latest
+npx vercel deploy --prod
 ```
+3. Set environment variables on Vercel:
+   - `SUPABASE_URL`
+   - `SUPABASE_KEY`
+   - `SUPABASE_PUBLISHABLE_KEY`
+   - `SUPABASE_DB_PASSWORD`
+   - `GEMINI_API_KEY`
+   - `APP_ENV=production`
 
 ---
 
-## 📝 Key Assumptions & Notes
+## 📝 Key Assumptions & Technical Notes
 - **Database Password Assumption**: Supabase PostgreSQL database instances are configured with password `checkfortheway#`.
-- **Zero-Downtime Fallback**: If remote Supabase connection credentials or Gemini API keys are absent, `aichatlegal` seamlessly switches to an embedded SQLite store and rule-based analytical AI engine, ensuring 100% operational uptime for offline testing and demonstration purposes.
+- **Zero-Downtime Fallback**: If remote Supabase connection credentials or Gemini API keys are absent or rate-limited/depleted, `aichatlegal` seamlessly switches to an embedded SQLite store and contextual banking RAG engine, ensuring 100% operational uptime for demonstration and testing.
