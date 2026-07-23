@@ -7,6 +7,12 @@ Project: aichatlegal
 import os
 import streamlit as st
 
+# Export WSGI/ASGI app and handler for Vercel Serverless Function compatibility
+try:
+    from api.index import app, handler
+except ImportError:
+    pass
+
 # 1. Page Configuration
 st.set_page_config(
     page_title="AIChatLegal | Enterprise Bank Policy & Legal Advisory",
