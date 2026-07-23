@@ -18,77 +18,31 @@ load_dotenv()
 
 GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "").strip("\"'")
 
+GEMINI_MODEL = "gemini-2.0-flash"
+GEMINI_ENDPOINT = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
+
 class GeminiLegalEngine:
     def __init__(self) -> None:
-        self.api_available: bool = False
+        self.api_available: bool = bool(GEMINI_API_KEY and GEMINI_API_KEY not in ("", "your-gemini-api-key-here"))
         self.client: Any = None
-        self.framework: str = "simulated"
-        
-        if GEMINI_API_KEY and GEMINI_API_KEY != "your-gemini-api-key-here":
-            if self._test_rest_connection():
-                self.api_available = True
-                self.framework = "gemini-rest-api"
-                print(f"[Gemini Engine] Successfully verified live Gemini REST API with active API key.")
-            else:
-                try:
-                    from google import genai  # type: ignore
-                    self.client = genai.Client(api_key=GEMINI_API_KEY)
-                    self.api_available = True
-                    self.framework = "google-genai"
-                except ImportError:
-                    try:
-                        import google.generativeai as genai  # type: ignore
-                        genai.configure(api_key=GEMINI_API_KEY)
-                        self.client = genai.GenerativeModel('gemini-1.5-pro')
-                        self.api_available = True
-                        self.framework = "google-generativeai"
-                    except Exception as e:
-                        print(f"[Gemini Warning] SDK init failed ({e}). Enabling analytical engine fallback.")
-                        self.api_available = False
+        self.framework: str = "gemini-rest-api" if self.api_available else "simulated"
+        if self.api_available:
+            print(f"[Gemini Engine] API key loaded — using {GEMINI_MODEL} via REST.")
         else:
-            print("[Gemini Engine] No valid GEMINI_API_KEY found. Running in high-precision simulated AI inference mode.")
-
-    def _test_rest_connection(self) -> bool:
-        """Verifies active Gemini REST API key against Google endpoint."""
-        try:
-            url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent"
-            headers = {
-                "Content-Type": "application/json",
-                "X-goog-api-key": GEMINI_API_KEY
-            }
-            data = json.dumps({
-                "contents": [{"parts": [{"text": "ping"}]}]
-            }).encode("utf-8")
-            
-            req = urllib.request.Request(url, data=data, headers=headers, method="POST")
-            with urllib.request.urlopen(req, timeout=5) as resp:
-                if resp.status == 200:
-                    return True
-        except Exception as e:
-            print(f"[Gemini REST Check] {e}")
-        return False
+            print("[Gemini Engine] No API key found — running in simulated mode.")
 
     def _call_gemini_rest(self, prompt: str) -> Optional[str]:
-        """Direct REST API call to Gemini endpoints using urllib."""
-        endpoints = [
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent",
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
-        ]
-        
-        for url in endpoints:
+        """Direct REST API call to Gemini 2.0 Flash via urllib with 429 retry."""
+        import time
+        headers = {
+            "Content-Type": "application/json",
+            "X-goog-api-key": GEMINI_API_KEY
+        }
+        payload = json.dumps({"contents": [{"parts": [{"text": prompt}]}]}).encode("utf-8")
+
+        for attempt in range(3):
             try:
-                headers = {
-                    "Content-Type": "application/json",
-                    "X-goog-api-key": GEMINI_API_KEY
-                }
-                payload = {
-                    "contents": [
-                        {"parts": [{"text": prompt}]}
-                    ]
-                }
-                data = json.dumps(payload).encode("utf-8")
-                req = urllib.request.Request(url, data=data, headers=headers, method="POST")
-                
+                req = urllib.request.Request(GEMINI_ENDPOINT, data=payload, headers=headers, method="POST")
                 with urllib.request.urlopen(req, timeout=25) as resp:
                     res_json = json.loads(resp.read().decode("utf-8"))
                     candidates = res_json.get("candidates", [])
@@ -96,15 +50,23 @@ class GeminiLegalEngine:
                         parts = candidates[0].get("content", {}).get("parts", [])
                         if parts:
                             return parts[0].get("text", "")
+            except urllib.error.HTTPError as e:
+                body = e.read().decode()[:300]
+                print(f"[Gemini REST attempt {attempt+1}] HTTP {e.code}: {body}")
+                if e.code == 429:
+                    time.sleep(2 ** attempt)  # exponential backoff: 1s, 2s, 4s
+                    continue
+                break
             except Exception as e:
-                print(f"[Gemini REST Endpoint Failure ({url})] {e}")
+                print(f"[Gemini REST attempt {attempt+1}] {e}")
+                break
         return None
 
     def analyze_policy_upload(self, title: str, client_name: str, deal_value: float, content: str) -> Dict[str, Any]:
         """
         Parses sales policy document text and returns structured legal risk scoring and recommendations.
         """
-        if GEMINI_API_KEY and GEMINI_API_KEY != "your-gemini-api-key-here":
+        if self.api_available:
             prompt = f"""
             You are General Counsel and Senior Credit Risk Officer for a Tier-1 Global Investment Bank.
             Analyze the following commercial lending or deal policy proposal for legal and regulatory risk.
@@ -215,10 +177,11 @@ class GeminiLegalEngine:
 
         full_prompt = f"{system_context}\n\nUser Inquiry: {user_query}"
 
-        if GEMINI_API_KEY and GEMINI_API_KEY != "your-gemini-api-key-here":
+        if self.api_available:
             text_resp = self._call_gemini_rest(full_prompt)
             if text_resp:
                 return text_resp
+            print("[Gemini Chat] Live API call failed — using simulated fallback.")
 
         # Fallback Conversational Engine
         return self._simulate_chat_response(user_role, user_query, policy_context)
