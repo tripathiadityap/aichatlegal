@@ -285,6 +285,8 @@ Limitation of liability capped at 1.0x annual fees in event of sanctions screeni
 
     def get_policy_by_id(self, policy_id: str) -> Optional[Dict[str, Any]]:
         """Fetch single policy details including risk scores and legal advice."""
+        if not policy_id or str(policy_id).startswith("sample-"):
+            return None
         if self.use_supabase:
             p_data = self._supabase_request(f"policies?id=eq.{policy_id}&select=*", "GET")
             if p_data and isinstance(p_data, list) and len(p_data) > 0:

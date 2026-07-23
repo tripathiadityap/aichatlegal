@@ -79,6 +79,8 @@ def get_policies():
 @app.get("/api/policies/{policy_id}")
 def get_policy(policy_id: str):
     try:
+        if not policy_id or policy_id.startswith("sample-"):
+            raise HTTPException(status_code=404, detail="Sample policy details loaded locally")
         p = db_manager.get_policy_by_id(policy_id)
         if not p:
             raise HTTPException(status_code=404, detail="Policy not found")
@@ -110,7 +112,7 @@ def analyze_policy(req: PolicyUploadRequest):
 def chat_with_gemini(req: ChatRequest):
     try:
         policy_ctx = None
-        if req.policy_id:
+        if req.policy_id and not str(req.policy_id).startswith("sample-"):
             policy_ctx = db_manager.get_policy_by_id(req.policy_id)
             
         response = gemini_engine.generate_chat_response(
@@ -316,8 +318,6 @@ def index_page():
             padding: 16px 24px;
             background: #0f172a;
             border-top: 1px solid var(--panel-border);
-            display: flex;
-            gap: 12px;
         }
         .send-btn {
             background: var(--accent-indigo);
@@ -328,6 +328,7 @@ def index_page():
             font-weight: 600;
             cursor: pointer;
             transition: background 0.2s;
+            height: 44px;
         }
         .send-btn:hover { background: #4f46e5; }
         
@@ -436,8 +437,10 @@ def index_page():
             </div>
 
             <div class="chat-input-bar">
-                <input type="text" id="chat-input" placeholder="Ask Gemini AI a question about policy terms, lawyer advice, or regulatory compliance..." onkeypress="handleKeyPress(event)">
-                <button class="send-btn" id="send-btn" onclick="submitChat()">Send ⚡</button>
+                <form id="chat-form" onsubmit="event.preventDefault(); submitChat();" style="display: flex; gap: 12px; width: 100%;">
+                    <input type="text" id="chat-input" placeholder="Ask Gemini AI a question about policy terms, lawyer advice, or regulatory compliance..." style="flex: 1; height: 44px;">
+                    <button type="submit" class="send-btn" id="send-btn">Send ⚡</button>
+                </form>
             </div>
         </div>
 
@@ -504,7 +507,7 @@ def index_page():
     </div>
 
     <script>
-        // Default Sample Bank Deals (Pre-populated for instant display)
+        // Default Sample Bank Deals
         let sampleDeals = [
             {
                 id: "sample-1",
@@ -591,7 +594,6 @@ def index_page():
                 listContainer.appendChild(item);
             });
 
-            // Set default selected policy if available
             if (policiesData.length > 0 && !sel.value) {
                 sel.value = policiesData[0].id;
                 onPolicySelected();
@@ -621,10 +623,6 @@ def index_page():
             }
         }
 
-        function handleKeyPress(e) {
-            if (e.key === 'Enter') submitChat();
-        }
-
         function sendSuggestion(q) {
             document.getElementById('chat-input').value = q;
             submitChat();
@@ -637,8 +635,9 @@ def index_page():
 
             const chatBox = document.getElementById('chat-box');
             const role = document.getElementById('user-role').value;
-            const policyId = document.getElementById('policy-select').value;
+            const policySel = document.getElementById('policy-select').value;
 
+            // User Chat Bubble
             const userMsg = document.createElement('div');
             userMsg.className = 'chat-bubble bubble-user';
             userMsg.textContent = q;
@@ -646,6 +645,7 @@ def index_page():
             input.value = '';
             chatBox.scrollTop = chatBox.scrollHeight;
 
+            // AI Loading Indicator
             const aiMsg = document.createElement('div');
             aiMsg.className = 'chat-bubble bubble-ai';
             aiMsg.innerHTML = '⚡ <em>Gemini AI searching policy vectors & regulatory precedent...</em>';
@@ -659,7 +659,7 @@ def index_page():
                     body: JSON.stringify({
                         user_role: role,
                         user_query: q,
-                        policy_id: policyId || null
+                        policy_id: policySel || null
                     })
                 });
 
@@ -671,6 +671,7 @@ def index_page():
                 
                 aiMsg.innerHTML = formatted;
             } catch (err) {
+                console.error("Fetch Chat Error:", err);
                 aiMsg.innerHTML = '❌ <em>Error communicating with Gemini AI assistant.</em>';
             }
             chatBox.scrollTop = chatBox.scrollHeight;
