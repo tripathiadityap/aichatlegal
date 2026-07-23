@@ -417,7 +417,6 @@ def index_page():
             <div class="control-group">
                 <div class="control-label">⚡ Live Bank Policies</div>
                 <div id="policies-list" style="display: flex; flex-direction: column; gap: 8px; font-size: 13px;">
-                    <div style="color: var(--text-muted);">Loading policies from Supabase...</div>
                 </div>
             </div>
         </div>
@@ -447,22 +446,22 @@ def index_page():
             
             <div class="metric-card">
                 <div style="font-size: 12px; color: var(--text-muted);">CLIENT CORPORATE ENTITY</div>
-                <div id="d-client" style="font-weight: 600; font-size: 15px; margin-top: 4px;">General Guidelines</div>
+                <div id="d-client" style="font-weight: 600; font-size: 15px; margin-top: 4px;">Apex Global Logistics Inc.</div>
             </div>
 
             <div class="metric-card">
                 <div style="font-size: 12px; color: var(--text-muted);">DEAL CAPITAL VOLUME</div>
-                <div id="d-value" class="metric-val">$0.00</div>
+                <div id="d-value" class="metric-val">$14.50M</div>
             </div>
 
             <div class="metric-card">
                 <div style="font-size: 12px; color: var(--text-muted);">AI RISK SCORE</div>
-                <div id="d-score" class="metric-val" style="color: #34d399;">Low Risk</div>
+                <div id="d-score" class="metric-val" style="color: #f59e0b;">68 / 100 (Review)</div>
             </div>
 
             <div class="metric-card" style="flex: 1; overflow-y: auto;">
                 <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 6px;">RECOMMENDED LEGAL ACTION</div>
-                <div id="d-rec" style="font-size: 13px; line-height: 1.4; color: #cbd5e1;">Select a specific policy upload to view Gemini pre-screening breakdown and lawyer opinions.</div>
+                <div id="d-rec" style="font-size: 13px; line-height: 1.4; color: #cbd5e1;">Sales requested 45 bps rate discount and leverage ratio relaxation to 4.25x EBITDA for $14.5M syndicated facility. Requires Schedule 14B Covenant Rider.</div>
             </div>
         </div>
 
@@ -505,15 +504,56 @@ def index_page():
     </div>
 
     <script>
-        let policiesData = [];
+        // Default Sample Bank Deals (Pre-populated for instant display)
+        let sampleDeals = [
+            {
+                id: "sample-1",
+                policy_code: "POL-2026-8819",
+                title: "Commercial Credit Override - Apex Global Logistics",
+                client_name: "Apex Global Logistics Inc.",
+                deal_value_usd: 14500000,
+                product_category: "Syndicated Revolving Credit",
+                status: "pending_legal_review",
+                summary: "Sales requested 45 bps rate discount and leverage ratio relaxation to 4.25x EBITDA for $14.5M syndicated facility.",
+                risk_score: { overall_risk_score: 68 }
+            },
+            {
+                id: "sample-2",
+                policy_code: "POL-2026-7402",
+                title: "Asset-Backed Financing Terms - Meridian Healthcare",
+                client_name: "Meridian Healthcare Partners",
+                deal_value_usd: 38000000,
+                product_category: "Asset Securitization",
+                status: "approved_with_riders",
+                summary: "Asset securitization deal with Medicare/Medicaid receivables pledge and HIPAA data processing disclosures.",
+                risk_score: { overall_risk_score: 25 }
+            },
+            {
+                id: "sample-3",
+                policy_code: "POL-2026-9104",
+                title: "Cross-Border Trade Line - Cyberdyne Systems",
+                client_name: "Cyberdyne Systems LLC",
+                deal_value_usd: 62000000,
+                product_category: "Structured Trade Finance",
+                status: "flagged_high_risk",
+                summary: "Unconfirmed LC proposal with OFAC liability cap request. High regulatory risk requiring Legal & Compliance intervention.",
+                risk_score: { overall_risk_score: 88 }
+            }
+        ];
+
+        let policiesData = [...sampleDeals];
 
         async function initApp() {
+            populatePoliciesDropdown();
             try {
                 const res = await fetch('/api/policies');
-                policiesData = await res.json();
-                populatePoliciesDropdown();
+                const livePolicies = await res.json();
+                if (Array.isArray(livePolicies) && livePolicies.length > 0) {
+                    policiesData = livePolicies;
+                    populatePoliciesDropdown();
+                }
             } catch (err) {
-                console.error("Error loading policies:", err);
+                console.log("Using pre-loaded sample bank policy deals:", err);
             }
         }
 
@@ -523,8 +563,6 @@ def index_page():
             sel.innerHTML = '<option value="">-- General Banking Regulations --</option>';
             listContainer.innerHTML = '';
 
-            if (!Array.isArray(policiesData)) policiesData = [];
-
             policiesData.forEach(p => {
                 const opt = document.createElement('option');
                 opt.value = p.id;
@@ -532,14 +570,32 @@ def index_page():
                 sel.appendChild(opt);
 
                 const item = document.createElement('div');
-                item.style.padding = '8px';
-                item.style.background = 'rgba(30, 41, 59, 0.4)';
-                item.style.borderRadius = '6px';
+                item.style.padding = '10px';
+                item.style.background = 'rgba(30, 41, 59, 0.5)';
+                item.style.border = '1px solid rgba(255,255,255,0.06)';
+                item.style.borderRadius = '8px';
                 item.style.cursor = 'pointer';
+                item.style.transition = 'all 0.2s';
+                item.onmouseover = () => { item.style.borderColor = 'var(--accent-indigo)'; };
+                item.onmouseout = () => { item.style.borderColor = 'rgba(255,255,255,0.06)'; };
                 item.onclick = () => { sel.value = p.id; onPolicySelected(); };
-                item.innerHTML = `<strong>${p.client_name}</strong><br><span style="color: var(--text-muted);">$${((p.deal_value_usd || 0)/1e6).toFixed(1)}M • ${p.status || 'Pending'}</span>`;
+                
+                const badgeColor = p.status === 'flagged_high_risk' ? '#f43f5e' : (p.status === 'approved_with_riders' ? '#34d399' : '#f59e0b');
+                item.innerHTML = `
+                    <div style="font-weight: 600; color: #f8fafc;">${p.client_name}</div>
+                    <div style="display: flex; justify-content: space-between; font-size: 12px; margin-top: 4px;">
+                        <span style="color: var(--accent-indigo); font-weight: 600;">$${((p.deal_value_usd || 0)/1e6).toFixed(1)}M</span>
+                        <span style="color: ${badgeColor}; font-weight: 600;">${(p.status || 'Pending').replace(/_/g, ' ').toUpperCase()}</span>
+                    </div>
+                `;
                 listContainer.appendChild(item);
             });
+
+            // Set default selected policy if available
+            if (policiesData.length > 0 && !sel.value) {
+                sel.value = policiesData[0].id;
+                onPolicySelected();
+            }
         }
 
         function onPolicySelected() {
@@ -552,7 +608,7 @@ def index_page():
                 
                 const score = p.risk_score ? p.risk_score.overall_risk_score : 50;
                 const scoreElem = document.getElementById('d-score');
-                scoreElem.textContent = `${score} / 100 (${p.status || 'Review'})`;
+                scoreElem.textContent = `${score} / 100 (${(p.status || 'Review').replace(/_/g, ' ')})`;
                 scoreElem.style.color = score > 70 ? '#f43f5e' : (score > 40 ? '#f59e0b' : '#34d399');
 
                 document.getElementById('d-rec').textContent = p.summary || (p.raw_content ? p.raw_content.substring(0, 150) + '...' : '');
