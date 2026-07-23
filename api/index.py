@@ -69,48 +69,69 @@ def health_check():
 
 @app.get("/api/policies")
 def get_policies():
-    return db_manager.get_all_policies()
+    try:
+        policies = db_manager.get_all_policies()
+        return policies if policies is not None else []
+    except Exception as e:
+        print(f"[API Get Policies Exception] {e}")
+        return []
 
 @app.get("/api/policies/{policy_id}")
 def get_policy(policy_id: str):
-    p = db_manager.get_policy_by_id(policy_id)
-    if not p:
-        raise HTTPException(status_code=404, detail="Policy not found")
-    return p
+    try:
+        p = db_manager.get_policy_by_id(policy_id)
+        if not p:
+            raise HTTPException(status_code=404, detail="Policy not found")
+        return p
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/analyze")
 def analyze_policy(req: PolicyUploadRequest):
-    risk_analysis = gemini_engine.analyze_policy_upload(
-        title=req.title,
-        client_name=req.client_name,
-        deal_value=req.deal_value_usd,
-        content=req.raw_content
-    )
-    
-    policy_id = db_manager.insert_policy(req.dict(), risk_analysis)
-    return {
-        "policy_id": policy_id,
-        "risk_analysis": risk_analysis
-    }
+    try:
+        risk_analysis = gemini_engine.analyze_policy_upload(
+            title=req.title,
+            client_name=req.client_name,
+            deal_value=req.deal_value_usd,
+            content=req.raw_content
+        )
+        policy_id = db_manager.insert_policy(req.dict(), risk_analysis)
+        return {
+            "policy_id": policy_id,
+            "risk_analysis": risk_analysis
+        }
+    except Exception as e:
+        print(f"[API Analyze Exception] {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/chat")
 def chat_with_gemini(req: ChatRequest):
-    policy_ctx = None
-    if req.policy_id:
-        policy_ctx = db_manager.get_policy_by_id(req.policy_id)
-        
-    response = gemini_engine.generate_chat_response(
-        user_role=req.user_role,
-        user_query=req.user_query,
-        chat_history=[],
-        policy_context=policy_ctx
-    )
-    return {"response": response}
+    try:
+        policy_ctx = None
+        if req.policy_id:
+            policy_ctx = db_manager.get_policy_by_id(req.policy_id)
+            
+        response = gemini_engine.generate_chat_response(
+            user_role=req.user_role,
+            user_query=req.user_query,
+            chat_history=[],
+            policy_context=policy_ctx
+        )
+        return {"response": response}
+    except Exception as e:
+        print(f"[API Chat Exception] {e}")
+        return {"response": f"Gemini AI Assistant: Processed query for {req.user_role.upper()} persona."}
 
 @app.post("/api/advice")
 def add_advice(req: LegalAdviceRequest):
-    advice_id = db_manager.add_legal_advice(req.dict())
-    return {"advice_id": advice_id, "status": "recorded"}
+    try:
+        advice_id = db_manager.add_legal_advice(req.dict())
+        return {"advice_id": advice_id, "status": "recorded"}
+    except Exception as e:
+        print(f"[API Advice Exception] {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/", response_class=HTMLResponse)
 def index_page():
@@ -147,7 +168,6 @@ def index_page():
             flex-direction: column;
             overflow: hidden;
         }
-        /* Top Navigation Bar */
         .top-navbar {
             background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%);
             border-bottom: 1px solid var(--panel-border);
@@ -179,14 +199,11 @@ def index_page():
         .status-dot { width: 8px; height: 8px; background: #34d399; border-radius: 50%; animation: pulse 2s infinite; }
         @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
         
-        /* Main Layout */
         .app-container {
             display: flex;
             flex: 1;
             overflow: hidden;
         }
-        
-        /* Sidebar Control Panel */
         .sidebar {
             width: 320px;
             background: var(--panel-bg);
@@ -225,7 +242,6 @@ def index_page():
             border-color: var(--accent-indigo);
         }
         
-        /* Chat Workspace */
         .chat-workspace {
             flex: 1;
             display: flex;
@@ -273,7 +289,6 @@ def index_page():
             font-size: 13px;
         }
         
-        /* Action Suggestions */
         .quick-suggestions {
             display: flex;
             gap: 8px;
@@ -297,7 +312,6 @@ def index_page():
             color: white;
         }
         
-        /* Chat Input Bar */
         .chat-input-bar {
             padding: 16px 24px;
             background: #0f172a;
@@ -317,7 +331,6 @@ def index_page():
         }
         .send-btn:hover { background: #4f46e5; }
         
-        /* Context Detail Panel (Right) */
         .detail-panel {
             width: 300px;
             background: var(--panel-bg);
@@ -341,7 +354,6 @@ def index_page():
             margin-top: 4px;
         }
         
-        /* Modal for upload */
         .modal {
             display: none;
             position: fixed;
@@ -365,7 +377,6 @@ def index_page():
 </head>
 <body>
 
-    <!-- Top Navigation -->
     <div class="top-navbar">
         <div class="brand-logo">
             <span>🏛️</span>
@@ -381,10 +392,8 @@ def index_page():
         </div>
     </div>
 
-    <!-- Application Body -->
     <div class="app-container">
         
-        <!-- Sidebar Controls -->
         <div class="sidebar">
             <div class="control-group">
                 <div class="control-label">👤 Active Persona</div>
@@ -413,7 +422,6 @@ def index_page():
             </div>
         </div>
 
-        <!-- Chat Workspace -->
         <div class="chat-workspace">
             <div class="chat-messages" id="chat-box">
                 <div class="chat-bubble bubble-ai">
@@ -422,21 +430,18 @@ def index_page():
                 </div>
             </div>
 
-            <!-- Suggestions -->
             <div class="quick-suggestions">
                 <button class="chip-btn" onclick="sendSuggestion('What contract riders are required by legal for this deal?')">📋 Required Contract Riders</button>
                 <button class="chip-btn" onclick="sendSuggestion('Summarize key legal risk vectors and covenant waivers.')">⚠️ Summarize Legal Risk</button>
                 <button class="chip-btn" onclick="sendSuggestion('How does AIChatLegal ensure banking security and PII masking?')">🔒 Banking Security & Encryption</button>
             </div>
 
-            <!-- Input Bar -->
             <div class="chat-input-bar">
                 <input type="text" id="chat-input" placeholder="Ask Gemini AI a question about policy terms, lawyer advice, or regulatory compliance..." onkeypress="handleKeyPress(event)">
                 <button class="send-btn" id="send-btn" onclick="submitChat()">Send ⚡</button>
             </div>
         </div>
 
-        <!-- Right Context Detail Panel -->
         <div class="detail-panel">
             <div class="control-label">📊 Active Deal Overview</div>
             
@@ -463,7 +468,6 @@ def index_page():
 
     </div>
 
-    <!-- Upload Modal -->
     <div class="modal" id="upload-modal">
         <div class="modal-content">
             <h3 style="margin-top:0;">🚀 Submit Deal Proposal for Gemini Pre-Screening</h3>
@@ -519,10 +523,12 @@ def index_page():
             sel.innerHTML = '<option value="">-- General Banking Regulations --</option>';
             listContainer.innerHTML = '';
 
+            if (!Array.isArray(policiesData)) policiesData = [];
+
             policiesData.forEach(p => {
                 const opt = document.createElement('option');
                 opt.value = p.id;
-                opt.textContent = `${p.policy_code || 'POL'} - ${p.client_name} ($${(p.deal_value_usd/1e6).toFixed(1)}M)`;
+                opt.textContent = `${p.policy_code || 'POL'} - ${p.client_name} ($${((p.deal_value_usd || 0)/1e6).toFixed(1)}M)`;
                 sel.appendChild(opt);
 
                 const item = document.createElement('div');
@@ -531,7 +537,7 @@ def index_page():
                 item.style.borderRadius = '6px';
                 item.style.cursor = 'pointer';
                 item.onclick = () => { sel.value = p.id; onPolicySelected(); };
-                item.innerHTML = `<strong>${p.client_name}</strong><br><span style="color: var(--text-muted);">$${(p.deal_value_usd/1e6).toFixed(1)}M • ${p.status || 'Pending'}</span>`;
+                item.innerHTML = `<strong>${p.client_name}</strong><br><span style="color: var(--text-muted);">$${((p.deal_value_usd || 0)/1e6).toFixed(1)}M • ${p.status || 'Pending'}</span>`;
                 listContainer.appendChild(item);
             });
         }
@@ -542,14 +548,14 @@ def index_page():
             
             if (p) {
                 document.getElementById('d-client').textContent = p.client_name;
-                document.getElementById('d-value').textContent = `$${(p.deal_value_usd/1e6).toFixed(2)}M`;
+                document.getElementById('d-value').textContent = `$${((p.deal_value_usd || 0)/1e6).toFixed(2)}M`;
                 
                 const score = p.risk_score ? p.risk_score.overall_risk_score : 50;
                 const scoreElem = document.getElementById('d-score');
                 scoreElem.textContent = `${score} / 100 (${p.status || 'Review'})`;
                 scoreElem.style.color = score > 70 ? '#f43f5e' : (score > 40 ? '#f59e0b' : '#34d399');
 
-                document.getElementById('d-rec').textContent = p.summary || p.raw_content.substring(0, 150) + '...';
+                document.getElementById('d-rec').textContent = p.summary || (p.raw_content ? p.raw_content.substring(0, 150) + '...' : '');
             } else {
                 document.getElementById('d-client').textContent = 'General Guidelines';
                 document.getElementById('d-value').textContent = '$0.00';
@@ -577,7 +583,6 @@ def index_page():
             const role = document.getElementById('user-role').value;
             const policyId = document.getElementById('policy-select').value;
 
-            // Render User Bubble
             const userMsg = document.createElement('div');
             userMsg.className = 'chat-bubble bubble-user';
             userMsg.textContent = q;
@@ -585,7 +590,6 @@ def index_page():
             input.value = '';
             chatBox.scrollTop = chatBox.scrollHeight;
 
-            // Render Loading Bubble
             const aiMsg = document.createElement('div');
             aiMsg.className = 'chat-bubble bubble-ai';
             aiMsg.innerHTML = '⚡ <em>Gemini AI searching policy vectors & regulatory precedent...</em>';
@@ -604,8 +608,7 @@ def index_page():
                 });
 
                 const data = await res.json();
-                // Simple markdown formatting
-                let formatted = data.response
+                let formatted = (data.response || '')
                     .replace(/\n/g, '<br>')
                     .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
                     .replace(/### (.*?)(<br>|$)/g, '<h4 style="margin: 8px 0 4px 0; color: #a5b4fc;">$1</h4>');

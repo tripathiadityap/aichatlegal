@@ -53,7 +53,8 @@ class DatabaseManager:
             print("[DB Engine Warning] Remote Supabase unavailable. Operating in local embedded SQLite mode.")
 
         # Initialize SQLite fallback database for local execution & offline testing
-        self.sqlite_path: str = os.path.join(os.path.dirname(__file__), "aichatlegal_local.db")
+        tmp_dir = "/tmp" if (os.name != "nt" and os.path.exists("/tmp")) else os.path.dirname(__file__)
+        self.sqlite_path: str = os.path.join(tmp_dir, "aichatlegal_local.db")
         self._init_local_db()
 
     def _test_endpoint(self, url: str, key: str) -> bool:
